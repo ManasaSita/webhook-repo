@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from pymongo import MongoClient
 from datetime import datetime
 
@@ -8,6 +8,10 @@ app = Flask(__name__)
 client = MongoClient('mongodb://localhost:27017/')
 db = client['github_events']
 collection = db['events']
+
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
