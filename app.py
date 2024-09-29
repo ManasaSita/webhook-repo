@@ -9,20 +9,48 @@ client = MongoClient("mongodb://localhost:27017/?retryWrites=true&loadBalanced=f
 db = client.webhook_db
 collection = db.github_events
 
-@app.route("/webhook", methods=["POST"])
+@app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.json
-    if data and "action" in data:
-        event = {
-            "author": data["sender"]["login"],
-            "action": data["action"],
-            "repo": data["repository"]["name"],
-            "timestamp": datetime.utcnow(),
-        }
-        # Insert event into MongoDB
-        collection.insert_one(event)
-        return jsonify({"message": "Event received"}), 200
-    return jsonify({"message": "Invalid data"}), 400
+    event_type = request.headers.get('X-GitHub-Event')
+
+    if not data or not event_type:
+        return jsonify({"message": "Invalid data"}), 400
+
+    if event_type == 'ping':
+        print(f"Ping event received: {data.get('zen', 'No Zen message')}")
+        return jsonify({'message': 'Ping received'}), 200
+    
+    elif event_type == 'push':
+        if 'pusher' in data and 'ref' in data:
+            author = data['pusher']['name']
+            to_branch = data['ref'].split('/')[-1]
+            timestamp = datetime.now()
+        else:
+            return jsonify({'message': 'Invalid data for push event'}), 400
+    
+    elif event_type == 'pull_request':
+        if 'pull_request' in data:
+            author = data['pull_request']['user']['login']
+            from_branch = data['pull_request']['head']['ref']
+            to_branch = data['pull_request']['base']['ref']
+            timestamp = datetime.now()
+        else:
+            return jsonify({'message': 'Invalid data for pull request event'}), 400
+
+    else:
+        return jsonify({'message': 'Unhandled event type'}), 400
+
+    # Store the event in MongoDB
+    event = {
+        "action": event_type,
+        "author": author,
+        "from_branch": from_branch if 'from_branch' in locals() else None,
+        "to_branch": to_branch,
+        "timestamp": timestamp
+    }
+    collection.insert_one(event)
+    return jsonify({'message': f'{event_type} event received'}), 200
 
 @app.route("/events", methods=["GET"])
 def get_events():
